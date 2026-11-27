@@ -1,0 +1,38 @@
+name: Compilar cubiomes
+on:
+  workflow_dispatch:
+  push:
+    paths: ["cubiomes_wrap.c"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+      - name: Descargar cubiomes 26.3 y compilar
+        run: |
+          git clone --depth 1 --branch v26.3 https://github.com/Denge12345/cubiomes cubi || git clone --depth 1 https://github.com/Denge12345/cubiomes cubi
+          INC=$(find cubi -name '*.h' -exec dirname {} \; | sort -u | sed 's/^/-I/' | tr '\n' ' ')
+          SRC=""
+          for f in $(find cubi -name '*.c' -not -path '*test*' -not -path '*example*' -not -path '*viewer*'); do
+            grep -q 'int main' "$f" || SRC="$SRC $f"
+          done
+          DEFS=""
+          for n in Village Desert_Pyramid Jungle_Pyramid Swamp_Hut Igloo Monument Mansion Outpost Ancient_City Ruined_Portal Shipwreck Ocean_Ruin Trail_Ruins Trial_Chambers Treasure Abandoned_Camp; do
+            grep -rqw "$n" cubi --include='*.h' && DEFS="$DEFS -DHAVE_$n"
+          done
+          echo "Estructuras detectadas:$DEFS"
+          emcc cubiomes_wrap.c $SRC $INC $DEFS -O3 -fwrapv -DNDEBUG \
+            -sMODULARIZE=1 -sEXPORT_NAME=createCubiomes -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=web \
+            -sERROR_ON_UNDEFINED_SYMBOLS=0 -sEXPORTED_RUNTIME_METHODS=cwrap,HEAPU8,HEAP32 \
+            -o cubiomes.js
+          rm -rf cubi
+      - name: Guardar resultado en la raíz
+        run: |
+          git config user.name "build"
+          git config user.email "build@users.noreply.github.com"
+          git add cubiomes.js cubiomes.wasm
+          git commit -m "Compilar cubiomes" || echo "sin cambios"
+          git push
