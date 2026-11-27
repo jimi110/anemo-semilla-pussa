@@ -23,6 +23,11 @@ table{border-collapse:collapse;width:100%;font-size:12px}td,th{padding:4px;borde
 .li{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #2a3340;cursor:pointer;font-size:12px}.li:hover{background:#21293a}.li img{width:22px;height:22px}.li span{margin-left:auto;color:#8b98a8}
 #msg{padding:12px;color:#d29922;font-size:13px}
 @media(max-width:820px){#app{grid-template-columns:1fr;grid-template-rows:56dvh 1fr}#map{order:-1}aside{border-right:0;border-top:1px solid #2a3340}}
+#md{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;background:#161b22e6;border:1px solid #30394a;border-radius:10px;overflow:hidden}
+#md button{width:auto;border:0;border-radius:0;padding:8px 14px;background:transparent;cursor:pointer}#md button.on{background:#2f81f7;font-weight:600}#md button:disabled{opacity:.35;cursor:not-allowed}
+#rv{position:absolute;left:10px;bottom:48px;display:none;align-items:center;gap:8px;background:#161b22e6;border:1px solid #30394a;border-radius:10px;padding:6px 10px;font-size:12px}
+#rv input{width:110px;padding:0}#rv button{width:auto;padding:5px 10px;cursor:pointer}#rv button.on{background:#2f81f7}
+#ld{position:absolute;top:56px;left:50%;transform:translateX(-50%);background:#000b;padding:4px 12px;border-radius:20px;font-size:12px;display:none}
 </style></head><body>
 <div id="app"><aside>
 <h1>🌍 SeedMap</h1><div class="sub">Minecraft Java · biomas y estructuras reales</div>
@@ -39,9 +44,12 @@ table{border-collapse:collapse;width:100%;font-size:12px}td,th{padding:4px;borde
 <h2>Ir a coordenadas</h2><div class="row"><div><label>X</label><input id="gx" type="number" value="0"></div><div><label>Z</label><input id="gz" type="number" value="0"></div></div><button class="s" id="gb" style="margin-top:8px">Ir</button>
 <h2>Más cercanas al spawn</h2><div id="near"></div>
 </aside>
-<div id="map"><canvas id="c"></canvas><div id="st">Genera un mapa</div><div id="sc"></div>
+<div id="map"><canvas id="c"></canvas><canvas id="c3" style="display:none"></canvas>
+<div id="md"><button data-m="b" class="on">Biomas</button><button data-m="k">Bloques</button><button data-m="3" id="b3">3D</button></div><div id="ld">Cargando relieve…</div>
+<div id="rv"><label style="margin:0">Relieve</label><input type="range" id="ve" min="1" max="8" step=".5" value="2"><button id="pn" class="s">✥ Mover</button></div><div id="st">Genera un mapa</div><div id="sc"></div>
 <div id="zb"><button id="zi">+</button><button id="zo">−</button></div><div id="info"></div></div></div>
 <script src="cubiomes.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const DEF={
 Village:["Aldea","#c2762f","M12 5 L20 12 H17 V19 H7 V12 H4 Z"],
@@ -62,15 +70,15 @@ Treasure:["Tesoro enterrado","#b8860b","M5 8 H19 V18 H5 Z M5 12 H19 M11 12 V15 H
 Abandoned_Camp:["Campamento abandonado","#c0562b","M12 4 C14 8 17 10 17 14 A5 5 0 0 1 7 14 C7 11 9 10 10 8 C11 9 12 7 12 4 Z"]};
 const SPAWN=new Path2D("M12 3 L14.6 9 L21 9.6 L16.2 13.8 L17.6 20 L12 16.8 L6.4 20 L7.8 13.8 L3 9.6 L9.4 9 Z");
 const $=i=>document.getElementById(i),cv=$('c'),g=cv.getContext('2d');
-let M,api={},cur=null,NAMES=[],P=[],on=[],res=[],sel=null,sp=[0,0],pal=[],V={x:0,z:0,bpp:8},W=1,H=1,R=3000,RMIN=0,cache=new Map(),budget=0,more=false;
+let M,api={},cur=null,NAMES=[],P=[],on=[],res=[],sel=null,sp=[0,0],palB=[],palK=[],isW=[],dry=[],mode='b',hOk=false,V={x:0,z:0,bpp:8},W=1,H=1,R=3000,RMIN=0,ic=new Map(),hc=new Map(),cc=new Map(),budget=0,more=false;
 function icon(c,x,y,r,col,path){c.save();c.translate(x,y);c.scale(r/12,r/12);c.beginPath();c.arc(0,0,12,0,7);c.fillStyle=col;c.fill();c.lineWidth=2;c.strokeStyle='#fff';c.stroke();
  c.translate(-8.4,-8.4);c.scale(.7,.7);c.fillStyle='#fff';c.strokeStyle='#fff';c.lineWidth=1.8;c.lineJoin='round';c.fill(path,'evenodd');c.stroke(path);c.restore()}
 function iconURL(i){const k=document.createElement('canvas');k.width=k.height=44;icon(k.getContext('2d'),22,22,20,NAMES[i][1],P[i]);return k.toDataURL()}
 createCubiomes({locateFile:f=>f}).then(m=>{M=m;
- for(const[n,r,a]of[['init','number',['string','number','number']],['mc_name','string',[]],['st_count','number',[]],['st_key','string',['number']],['tile','number',['number','number','number']],['biome_at','number',['number','number']],['bname','string',['number']],['cols_ptr','number',[]],['spawn_x','number',[]],['spawn_z','number',[]],['find_ptr','number',[]],['find_structs','number',['number','number','number','number','number']]])api[n]=M.cwrap(n,r,a);
+ for(const[n,r,a]of[['init','number',['string','number','number']],['mc_name','string',[]],['st_count','number',[]],['st_key','string',['number']],['tile','number',['number','number','number']],['biome_at','number',['number','number']],['bname','string',['number']],['cols_ptr','number',[]],['spawn_x','number',[]],['spawn_z','number',[]],['find_ptr','number',[]],['find_structs','number',['number','number','number','number','number']],['h_available','number',[]],['htile','number',['number','number','number']]])api[n]=M.cwrap(n,r,a);
  for(let i=0;i<api.st_count();i++){const k=api.st_key(i);NAMES.push(DEF[k]||[k.replace(/_/g,' '),'#667788','M12 5 L20 12 L12 19 L4 12 Z']);P.push(new Path2D(NAMES[i][2]));on.push(true)}
  $('msg').remove();size();load();$('go').click()}).catch(e=>{$('msg').textContent='Falta cubiomes.js / cubiomes.wasm. Ve a la pestaña Actions de GitHub y ejecuta "Compilar cubiomes".'});
-function size(){const d=devicePixelRatio||1,r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;g.setTransform(d,0,0,d,0,0);draw()}
+function size(){const d=devicePixelRatio||1,r=cv.parentElement.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;g.setTransform(d,0,0,d,0,0);if(ren){ren.setPixelRatio(d);ren.setSize(W,H,false);cam.aspect=W/H;cam.updateProjectionMatrix();d3=true}redraw()}
 addEventListener('resize',size);
 function load(){const h=new URLSearchParams(location.hash.slice(1));if(h.get('seed'))$('seed').value=h.get('seed');if(h.get('min'))$('rmin').value=h.get('min');if(h.get('max'))$('rmax').value=h.get('max')}
 function seedParse(t){t=t.trim();if(/^-?\d+$/.test(t))return BigInt.asIntN(64,BigInt(t));let h=0;for(const c of t)h=(Math.imul(31,h)+c.charCodeAt(0))|0;return BigInt(h)}
@@ -79,13 +87,13 @@ $('go').onclick=()=>{if(!M)return;const s=seedParse($('seed').value);
  cur=api.init($('ver').value,Number(BigInt.asIntN(32,s)),Number(BigInt.asIntN(32,s>>32n)));
  if(cur<0){alert('Versión no soportada por el motor');return}
  const en=api.mc_name();$('eng').textContent='Motor: Minecraft '+en;$('warn').textContent=($('ver').value==='newest'&&!/26/.test(en))?'Aviso: el motor compilado no es 26.x ('+en+'). Revisa build.yml.':'';
- const cp=api.cols_ptr(),c=M.HEAPU8.slice(cp,cp+768);pal=[];for(let i=0;i<256;i++){const z=c[i*3]+c[i*3+1]+c[i*3+2]===0;pal.push(z?[70,70,84]:[c[i*3],c[i*3+1],c[i*3+2]])}
- cache.clear();sp=[api.spawn_x(),api.spawn_z()];sel=null;$('info').style.display='none';
+ buildPal();clearAll();hOk=api.h_available()===1;$('b3').disabled=!hOk||typeof THREE==='undefined';if(!hOk||typeof THREE==='undefined'){$('warn').textContent+=' Relieve/3D no disponible: este motor no incluye mapApproxHeight (solo 1.18+).';if(mode==='3')setMode('k')}
+ sp=[api.spawn_x(),api.spawn_z()];sel=null;$('info').style.display='none';
  RMIN=+$('rmin').value||0;R=Math.min(Math.max(+$('rmax').value||3000,100),15000);res=[];
  for(let i=0;i<NAMES.length;i++){const n=api.find_structs(i,-R,-R,R,R),p=api.find_ptr()>>2,h=M.HEAP32;
   for(let j=0;j<n;j++){const x=h[p+2*j],z=h[p+2*j+1],d=Math.hypot(x,z);if(d>=RMIN&&d<=R)res.push({i,x,z,d:Math.hypot(x-sp[0],z-sp[1])})}}
  history.replaceState(null,'','#seed='+encodeURIComponent($('seed').value)+'&min='+RMIN+'&max='+R);
- V={x:0,z:0,bpp:2.4*R/Math.min(W,H)};legend();table();near();draw()};
+ V={x:0,z:0,bpp:2.4*R/Math.min(W,H)};T.x=0;T.z=0;T.dist=Math.max(400,R*.8);legend();table();near();redraw()};
 function legend(){$('leg').innerHTML='';NAMES.forEach((n,i)=>{const d=document.createElement('div');d.className='chip'+(on[i]?'':' off');
  d.innerHTML='<img src="'+iconURL(i)+'">'+n[0];d.onclick=()=>{on[i]=!on[i];legend();near();draw()};$('leg').appendChild(d)})}
 function table(){const nz=+$('zn').value,lab=nz==4?['NE','SE','SO','NO']:nz==8?['NNE','ENE','ESE','SSE','SSO','OSO','ONO','NNO']:['Todo'];
@@ -96,23 +104,17 @@ function table(){const nz=+$('zn').value,lab=nz==4?['NE','SE','SO','NO']:nz==8?[
 $('zn').onchange=table;
 function near(){const l=res.filter(o=>on[o.i]).sort((a,b)=>a.d-b.d).slice(0,40);$('near').innerHTML='';
  l.forEach(o=>{const d=document.createElement('div');d.className='li';d.innerHTML='<img src="'+iconURL(o.i)+'">'+NAMES[o.i][0]+'<span>'+o.x+', '+o.z+' · '+Math.round(o.d)+'m</span>';d.onclick=()=>{fly(o.x,o.z);select(o)};$('near').appendChild(d)})}
-function fly(x,z){V.x=x;V.z=z;V.bpp=Math.min(V.bpp,6);draw()}
+function fly(x,z){V.x=x;V.z=z;V.bpp=Math.min(V.bpp,6);T.x=x;T.z=z;T.dist=Math.min(T.dist,900);d3=true;redraw()}
 $('gb').onclick=()=>fly(+$('gx').value||0,+$('gz').value||0);
-function select(o){sel=o;const el=$('info');if(!o){el.style.display='none';draw();return}
+function select(o){sel=o;const el=$('info');if(!o){el.style.display='none';redraw();return}
  el.innerHTML='<b>'+NAMES[o.i][0]+'</b>X '+o.x+' · Z '+o.z+'<br><span class="sub">'+Math.round(o.d)+' bloques del spawn</span><button class="s" id="cp">Copiar /tp</button>';el.style.display='block';
- $('cp').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText('/tp @s '+o.x+' ~ '+o.z);$('cp').textContent='¡Copiado!'};draw()}
-function getTile(s,tx,tz){const k=s+'|'+tx+'|'+tz;let t=cache.get(k);if(t)return t;if(budget--<=0){more=true;return null}
- if(cache.size>700)cache.clear();
- const p=api.tile(s,tx*128,tz*128),b=M.HEAPU8.slice(p,p+16384);
- t=document.createElement('canvas');t.width=t.height=128;const x=t.getContext('2d'),im=x.createImageData(128,128);
- for(let i=0;i<16384;i++){const c=pal[b[i]]||pal[0];im.data[i*4]=c[0];im.data[i*4+1]=c[1];im.data[i*4+2]=c[2];im.data[i*4+3]=255}
- x.putImageData(im,0,0);cache.set(k,t);return t}
+ $('cp').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText('/tp @s '+o.x+' ~ '+o.z);$('cp').textContent='¡Copiado!'};redraw()}
 const sx=x=>(x-V.x)/V.bpp+W/2,sz=z=>(z-V.z)/V.bpp+H/2;
-function draw(){if(!M)return;g.fillStyle='#0b1a2a';g.fillRect(0,0,W,H);if(!cur)return;g.imageSmoothingEnabled=false;
+function draw(){if(!M||mode==='3')return;g.fillStyle='#0b1a2a';g.fillRect(0,0,W,H);if(!cur)return;g.imageSmoothingEnabled=false;
  const s=[256,64,16,4,1].find(v=>v<=Math.max(1,V.bpp))||1,ts=128*s;
  const x0=Math.floor((V.x-W/2*V.bpp)/ts),x1=Math.floor((V.x+W/2*V.bpp)/ts),z0=Math.floor((V.z-H/2*V.bpp)/ts),z1=Math.floor((V.z+H/2*V.bpp)/ts);
  budget=10;more=false;
- for(let tz=z0;tz<=z1;tz++)for(let tx=x0;tx<=x1;tx++){const t=getTile(s,tx,tz);if(t)g.drawImage(t,sx(tx*ts),sz(tz*ts),ts/V.bpp+.6,ts/V.bpp+.6)}
+ for(let tz=z0;tz<=z1;tz++)for(let tx=x0;tx<=x1;tx++){const t=getCanvas(mode==='b'?'b':'k',s,tx,tz);if(t)g.drawImage(t,sx(tx*ts),sz(tz*ts),ts/V.bpp+.6,ts/V.bpp+.6)}
  const nz=+$('zn').value;g.lineWidth=2;g.strokeStyle='#fff';g.setLineDash([]);
  g.beginPath();g.arc(sx(0),sz(0),R/V.bpp,0,7);g.stroke();
  if(RMIN>0){g.setLineDash([8,6]);g.beginPath();g.arc(sx(0),sz(0),RMIN/V.bpp,0,7);g.stroke();g.setLineDash([])}
@@ -135,8 +137,88 @@ cv.onpointermove=e=>{const b=cv.getBoundingClientRect(),p=pts.get(e.pointerId);
 cv.onpointerup=e=>{if(pts.size==1&&mv<6){const b=cv.getBoundingClientRect();select(hit(e.clientX-b.left,e.clientY-b.top))}pts.delete(e.pointerId);pinch=0};
 cv.onpointercancel=e=>{pts.delete(e.pointerId);pinch=0};
 function hit(mx,my){let best=null,bd=18;for(const o of res){if(!on[o.i])continue;const d=Math.hypot(sx(o.x)-mx,sz(o.z)-my);if(d<bd){bd=d;best=o}}return best}
-function zoom(f,mx=W/2,my=H/2){const n=Math.min(500,Math.max(.25,V.bpp*f)),wx=V.x+(mx-W/2)*V.bpp,wz=V.z+(my-H/2)*V.bpp;V.bpp=n;V.x=wx-(mx-W/2)*n;V.z=wz-(my-H/2)*n;draw()}
+function zoom(f,mx=W/2,my=H/2){if(mode==='3'){T.dist=Math.min(40000,Math.max(60,T.dist*f));d3=true;return}const n=Math.min(500,Math.max(.25,V.bpp*f)),wx=V.x+(mx-W/2)*V.bpp,wz=V.z+(my-H/2)*V.bpp;V.bpp=n;V.x=wx-(mx-W/2)*n;V.z=wz-(my-H/2)*n;draw()}
 cv.onwheel=e=>{e.preventDefault();const b=cv.getBoundingClientRect();zoom(Math.exp(e.deltaY*.0015),e.clientX-b.left,e.clientY-b.top)};
 $('zi').onclick=()=>zoom(.6);$('zo').onclick=()=>zoom(1/.6);
 $('seed').onkeydown=e=>{if(e.key==='Enter')$('go').click()};
+
+/* ===== Paletas, tiles y relieve ===== */
+const BC=[[/stony_peaks|stony_shore/,[125,125,125]],[/frozen_(river|ocean)/,[160,195,235]],[/deep.*ocean/,[40,76,176]],[/warm_ocean|lukewarm/,[72,172,230]],[/ocean|river/,[63,118,228]],
+[/desert|beach/,[219,207,163]],[/badlands/,[190,100,50]],[/snowy|frozen|ice|grove|slopes|jagged/,[245,248,250]],[/jungle|bamboo/,[89,201,60]],[/swamp|mangrove/,[106,112,57]],
+[/taiga|old_growth/,[134,183,131]],[/savanna/,[191,183,85]],[/dark_forest/,[80,122,50]],[/cherry/,[236,160,190]],[/mushroom/,[112,100,110]],[/meadow/,[131,187,109]],
+[/windswept|extreme_hills|gravelly/,[138,170,130]],[/sulfur/,[200,190,80]],[/pale_garden/,[130,140,130]],[/forest|birch/,[121,192,90]],[/plains|sunflower/,[145,189,89]]];
+function buildPal(){const cp=api.cols_ptr(),c=M.HEAPU8.slice(cp,cp+768);palB=[];palK=[];isW=[];dry=[];
+ for(let id=0;id<256;id++){const z=c[id*3]+c[id*3+1]+c[id*3+2]===0;palB.push(z?[70,70,84]:[c[id*3],c[id*3+1],c[id*3+2]]);
+  const n=(api.bname(id)||'').toLowerCase();let col=[121,192,90];for(const[re,cl]of BC)if(re.test(n)){col=cl;break}
+  palK.push(col);isW.push(/ocean|river/.test(n)&&!/frozen/.test(n));dry.push(/desert|badlands|beach|stony|ice/.test(n))}}
+function clearAll(){ic.clear();hc.clear();cc.clear();if(ren){for(const m of mesh3.values()){sc.remove(m);m.geometry.dispose();m.material.map.dispose();m.material.dispose()}mesh3.clear();for(const p of spr3.values())sc.remove(p);spr3.clear()}}
+function getIds(s,tx,tz){const k=s+'|'+tx+'|'+tz;let a=ic.get(k);if(a)return a;if(ic.size>800)ic.clear();const p=api.tile(s,tx*128,tz*128);a=M.HEAPU8.slice(p,p+16384);ic.set(k,a);return a}
+function getH(s,tx,tz){const k=s+'|'+tx+'|'+tz;let a=hc.get(k);if(a)return a;if(hc.size>1500)hc.clear();const p=api.htile(s,tx,tz)>>2;a=M.HEAPF32.slice(p,p+1089);hc.set(k,a);return a}
+function paintK(d,ids,Hh,s){const sp=4*s;let gx,gz;
+ if(Hh){gx=new Float32Array(1089);gz=new Float32Array(1089);const h=(c,r)=>Hh[Math.min(32,Math.max(0,r))*33+Math.min(32,Math.max(0,c))];
+  for(let r=0;r<33;r++)for(let c=0;c<33;c++){gx[r*33+c]=(h(c+1,r)-h(c-1,r))/(2*sp);gz[r*33+c]=(h(c,r+1)-h(c,r-1))/(2*sp)}}
+ for(let j=0;j<128;j++)for(let i=0;i<128;i++){const id=ids[j*128+i],B=palK[id]||palK[0];let h=63,sh=1;
+  if(Hh){const u=i/4,v=j/4,c=Math.min(31,u|0),r=Math.min(31,v|0),fx=u-c,fz=v-r,o=r*33+c,w0=(1-fx)*(1-fz),w1=fx*(1-fz),w2=(1-fx)*fz,w3=fx*fz;
+   h=Hh[o]*w0+Hh[o+1]*w1+Hh[o+33]*w2+Hh[o+34]*w3;const a=gx[o]*w0+gx[o+1]*w1+gx[o+33]*w2+gx[o+34]*w3,b=gz[o]*w0+gz[o+1]*w1+gz[o+33]*w2+gz[o+34]*w3;
+   sh=1+Math.max(-.4,Math.min(.4,(a+b)*.5*(1+s*.1)))}
+  let R_=B[0],G_=B[1],B_=B[2];
+  if(isW[id]){const t=Math.max(0,Math.min(1,(63-h)/50))*.7;R_+=(20-R_)*t;G_+=(45-G_)*t;B_+=(120-B_)*t;sh=1+(sh-1)*.3}
+  else if(h>205){R_=245;G_=248;B_=250}
+  else if(h>135&&!dry[id]){const t=Math.min(1,(h-135)/45);R_+=(125-R_)*t;G_+=(125-G_)*t;B_+=(125-B_)*t}
+  const o4=(j*128+i)*4;d[o4]=Math.min(255,R_*sh);d[o4+1]=Math.min(255,G_*sh);d[o4+2]=Math.min(255,B_*sh);d[o4+3]=255}}
+function buildCanvas(m,s,tx,tz){const ids=getIds(s,tx,tz),t=document.createElement('canvas');t.width=t.height=128;const x=t.getContext('2d'),im=x.createImageData(128,128),d=im.data;
+ if(m==='b'){for(let i=0;i<16384;i++){const c=palB[ids[i]]||palB[0];d[i*4]=c[0];d[i*4+1]=c[1];d[i*4+2]=c[2];d[i*4+3]=255}}
+ else paintK(d,ids,hOk?getH(s,tx,tz):null,s);
+ x.putImageData(im,0,0);return t}
+function getCanvas(m,s,tx,tz){const k=m+s+'|'+tx+'|'+tz;let t=cc.get(k);if(t)return t;const cost=m==='k'&&hOk?4:1;if(budget<cost){more=true;return null}budget-=cost;
+ if(cc.size>500)cc.clear();t=buildCanvas(m,s,tx,tz);cc.set(k,t);return t}
+function redraw(){mode==='3'?(d3=true):draw()}
+function hAt(x,z){for(const s of [1,4,16,64,256]){const ts=128*s,tx=Math.floor(x/ts),tz=Math.floor(z/ts),Hh=hc.get(s+'|'+tx+'|'+tz);if(Hh){const gx=(x-tx*ts)/(4*s),gz=(z-tz*ts)/(4*s),i=Math.min(31,gx|0),j=Math.min(31,gz|0),fx=gx-i,fz=gz-j,o=j*33+i;
+  return Math.max(62.5,Hh[o]*(1-fx)*(1-fz)+Hh[o+1]*fx*(1-fz)+Hh[o+33]*(1-fx)*fz+Hh[o+34]*fx*fz)}}return 70}
+/* ===== Vista 3D ===== */
+let ren=null,sc,cam,mesh3=new Map(),spr3=new Map(),sm=[],T={x:0,z:0,yaw:.6,pitch:.75,dist:2000,ve:2},d3=true,s3=1,pan3=false;
+const c3=$('c3'),rc=typeof THREE!=='undefined'?new THREE.Raycaster():null;
+function init3(){if(ren)return;ren=new THREE.WebGLRenderer({canvas:c3,antialias:true});sc=new THREE.Scene();sc.background=new THREE.Color(0x8fbfee);
+ cam=new THREE.PerspectiveCamera(50,W/H,2,500000);sc.add(new THREE.HemisphereLight(0xffffff,0x667788,.85));const dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(-1,2,-1);sc.add(dl);
+ ren.setPixelRatio(devicePixelRatio||1);ren.setSize(W,H,false)}
+function mkMesh(s,tx,tz){if(budget<5)return null;budget-=5;const ts=128*s,Hh=getH(s,tx,tz),k='k'+s+'|'+tx+'|'+tz;let cv_=cc.get(k);if(!cv_){cv_=buildCanvas('k',s,tx,tz);cc.set(k,cv_)}
+ const geo=new THREE.PlaneGeometry(ts,ts,32,32);geo.rotateX(-Math.PI/2);const pos=geo.attributes.position;for(let n=0;n<pos.count;n++)pos.setY(n,Math.max(62.5,Hh[n]));geo.computeVertexNormals();
+ const tex=new THREE.CanvasTexture(cv_);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.LinearFilter;tex.generateMipmaps=false;
+ const m=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({map:tex}));m.position.set(tx*ts+ts/2,0,tz*ts+ts/2);m.scale.y=T.ve;m.userData.tile=1;sc.add(m);return m}
+function spriteMat(i){if(!sm[i]){const k=document.createElement('canvas');k.width=k.height=64;icon(k.getContext('2d'),32,32,29,NAMES[i][1],P[i]);sm[i]=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),sizeAttenuation:false,depthTest:false})}return sm[i]}
+function sync3D(){const E=Math.min(T.dist*2.4,60000),s=[1,4,16,64,256].find(v=>128*v>=2*E/9)||256,ts=128*s;
+ if(s!==s3){for(const m of mesh3.values()){sc.remove(m);m.geometry.dispose();m.material.map.dispose();m.material.dispose()}mesh3.clear();s3=s}
+ const tx0=Math.floor((T.x-E)/ts),tx1=Math.floor((T.x+E)/ts),tz0=Math.floor((T.z-E)/ts),tz1=Math.floor((T.z+E)/ts),L=[];
+ for(let tz=tz0;tz<=tz1;tz++)for(let tx=tx0;tx<=tx1;tx++)L.push([tx,tz,Math.hypot((tx+.5)*ts-T.x,(tz+.5)*ts-T.z)]);L.sort((a,b)=>a[2]-b[2]);
+ budget=15;let pend=false;const need=new Set();
+ for(const[tx,tz]of L){const k=tx+'|'+tz;need.add(k);if(!mesh3.has(k)){const m=mkMesh(s,tx,tz);if(m)mesh3.set(k,m);else pend=true}}
+ for(const[k,m]of mesh3)if(!need.has(k)){sc.remove(m);m.geometry.dispose();m.material.map.dispose();m.material.dispose();mesh3.delete(k)}
+ sc.fog=new THREE.Fog(0x8fbfee,E*.55,E*1.1);
+ const all=[...res.map(o=>({o,i:o.i,x:o.x,z:o.z,sp:0})),{o:null,i:-1,x:sp[0],z:sp[1],sp:1}];
+ for(const a of all){let p=spr3.get(a.o||'sp');if(!p){p=new THREE.Sprite(a.sp?spawnMat():spriteMat(a.i));p.scale.set(.05,.05,1);p.userData.o=a.o;p.renderOrder=9;sc.add(p);spr3.set(a.o||'sp',p)}
+  const vis=(a.sp||on[a.i])&&Math.hypot(a.x-T.x,a.z-T.z)<E;p.visible=vis;if(vis)p.position.set(a.x,hAt(a.x,a.z)*T.ve+8*T.ve,a.z)}
+ $('ld').style.display=pend?'block':'none';return pend}
+let spm=null;function spawnMat(){if(!spm){const k=document.createElement('canvas');k.width=k.height=64;icon(k.getContext('2d'),32,32,29,'#e6a800',SPAWN);spm=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),sizeAttenuation:false,depthTest:false})}return spm}
+function cam3(){const ty=hAt(T.x,T.z)*T.ve;cam.position.set(T.x+T.dist*Math.cos(T.pitch)*Math.sin(T.yaw),ty+T.dist*Math.sin(T.pitch),T.z+T.dist*Math.cos(T.pitch)*Math.cos(T.yaw));cam.lookAt(T.x,ty,T.z)}
+function loop3(){if(mode!=='3')return;if(d3){d3=sync3D();cam3();ren.render(sc,cam)}requestAnimationFrame(loop3)}
+function setMode(m){const prev=mode;mode=m;document.querySelectorAll('#md button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+ cv.style.display=m==='3'?'none':'block';c3.style.display=m==='3'?'block':'none';$('rv').style.display=m==='3'?'flex':'none';$('ld').style.display='none';
+ if(m==='3'){init3();T.x=V.x;T.z=V.z;T.dist=Math.max(300,V.bpp*H*.8);size();d3=true;loop3()}
+ else{if(prev==='3'){V.x=T.x;V.z=T.z;V.bpp=Math.max(.25,T.dist/(H*.8))}draw()}}
+document.querySelectorAll('#md button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+$('ve').oninput=e=>{T.ve=+e.target.value;for(const m of mesh3.values())m.scale.y=T.ve;d3=true};
+$('pn').onclick=()=>{pan3=!pan3;$('pn').classList.toggle('on',pan3)};
+const p3=new Map();let mv3=0,pin3=0,btn3=0,hv=false;
+const dd3=()=>{const a=[...p3.values()];return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)};
+function panBy(dx,dy){const k=T.dist*.0013,c=Math.cos(T.yaw),s=Math.sin(T.yaw);T.x+=-dx*k*c+dy*k*(-s);T.z+=dx*k*s+dy*k*(-c)}
+c3.oncontextmenu=e=>e.preventDefault();
+c3.onpointerdown=e=>{c3.setPointerCapture(e.pointerId);p3.set(e.pointerId,{x:e.clientX,y:e.clientY});mv3=0;btn3=e.button;if(p3.size==2)pin3=dd3()};
+c3.onpointermove=e=>{const p=p3.get(e.pointerId);if(!p){hover3(e);return}const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+ if(p3.size==1){mv3+=Math.abs(dx)+Math.abs(dy);if(btn3===2||e.shiftKey||pan3)panBy(dx,dy);else{T.yaw-=dx*.006;T.pitch=Math.min(1.5,Math.max(.1,T.pitch+dy*.005))}}
+ else{const d=dd3();if(pin3)T.dist=Math.min(40000,Math.max(60,T.dist*pin3/d));pin3=d;mv3+=9}d3=true};
+c3.onpointerup=e=>{if(p3.size==1&&mv3<6)pick3(e);p3.delete(e.pointerId);pin3=0};c3.onpointercancel=e=>{p3.delete(e.pointerId);pin3=0};
+c3.onwheel=e=>{e.preventDefault();T.dist=Math.min(40000,Math.max(60,T.dist*Math.exp(e.deltaY*.0015)));d3=true};
+function ndc(e){const b=c3.getBoundingClientRect();return new THREE.Vector2((e.clientX-b.left)/b.width*2-1,-((e.clientY-b.top)/b.height)*2+1)}
+function pick3(e){rc.setFromCamera(ndc(e),cam);const h=rc.intersectObjects([...spr3.values()].filter(p=>p.visible&&p.userData.o));select(h.length?h[0].object.userData.o:null)}
+function hover3(e){if(hv||!cur)return;hv=true;requestAnimationFrame(()=>{hv=false;rc.setFromCamera(ndc(e),cam);const h=rc.intersectObjects([...mesh3.values()]);if(h.length){const x=Math.round(h[0].point.x),z=Math.round(h[0].point.z);$('st').textContent=api.bname(api.biome_at(x,z))+' · X '+x+' Z '+z+' · Y≈'+Math.round(h[0].point.y/T.ve)}})}
 </script></body></html>
